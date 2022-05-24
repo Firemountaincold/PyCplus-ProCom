@@ -45,11 +45,12 @@ class DataMine:
     def _data_handle(self, client, address):  # 此函数主要用于解析数据，调用函数处理，并将结构序列化为字符串
         func_name, timestamps, datas = self._recvall(client)
         if(func_name==None):
+            client.close()
             return
-        return_data = methodcaller(func_name, timestamps, datas)(self)
+        tag_str, return_data = methodcaller(func_name, timestamps, datas)(self)
 
         data_str = str(np.array(return_data).reshape(-1).tolist()).replace(' ', '')
-        self._sendall(client, data_str)
+        self._sendall(client, tag_str + ":" + data_str)
         time.sleep(2)
         client.close()
         self.g_conn_pool.remove(client)
@@ -60,19 +61,18 @@ class DataMine:
         print(log)
 
     def _recvall(self, sock):  # 收到数据，处理数据
-        header = sock.recv(65536000)
+        header = sock.recv(6553500)
         header = str(header).split('\\', 1)[0].replace("b'", '')
         try:
             func_name, timestamp, data = header.split(',,')
         except:
-            print("【警告】收到格式不规范的数据！")
-            print(header)
+            print("【警告】收到格式不规范的数据！长度：{}".format(len(header)))
             return None,None,None
         timestamps = timestamp.split(',')
         datas = data.split(',')
         timestamps = list(map(int, timestamps))
         datas = list(map(int, datas))
-        print("【信息】收到数据！\n【信息】调用函数："+func_name)
+        print("【信息】收到数据！\n【信息】调用函数：" + func_name)
         print("【信息】收到时间戳", len(timestamps), "个，大小", len(timestamp)*8, ' Bytes')
         print("【信息】收到数据", len(datas), "个，大小", len(data)*8, ' Bytes')
         return func_name, timestamps, datas
@@ -101,3 +101,4 @@ class DataMine:
             # 设置成守护线程
             thread.setDaemon(True)
             thread.start()
+            

@@ -25,6 +25,7 @@ private:
 public:
     DataMine(const char *, int);
     int RunFunction(char *, int *, int *, int);
+    int CloseSocket();
 };
 
 DataMine::DataMine(const char *ip = "127.0.0.1", int port = 8888)
@@ -39,9 +40,9 @@ DataMine::DataMine(const char *ip = "127.0.0.1", int port = 8888)
 
 int DataMine::RunFunction(char *funcname, int *timestamp, int *data, int length)
 {
-    // ARIMA,自回归移动平均
+    // 调用函数
     int l = length * 20 + 20;
-    printf("【信息】选择方法：%s\n",funcname);
+    printf("【信息】选择方法：%s\n", funcname);
     char *func = new char[l];
     sprintf(func, "%s,", funcname);
     for (int i = 0; i < length; i++)
@@ -54,7 +55,7 @@ int DataMine::RunFunction(char *funcname, int *timestamp, int *data, int length)
         sprintf(func, "%s,%d", func, data[i]);
     }
     int siz = send(socketclient, func, l, 0);
-    printf("【信息】数据已发送：（%d 字符）%d Bytes\n", siz, siz*sizeof(char)*8);
+    printf("【信息】数据已发送：（%d 字符）%d Bytes\n", siz, siz * 8);
 
     char re[l]; //收到的字符串
 
@@ -64,6 +65,12 @@ int DataMine::RunFunction(char *funcname, int *timestamp, int *data, int length)
     return ns1;
 }
 
+int DataMine::CloseSocket()
+{
+    int ret = shutdown(socketclient, 2);
+    return ret;
+}
+
 int Run(int *timestamp, int *data, int length, int func)
 {
     DataMine dm;
@@ -71,14 +78,21 @@ int Run(int *timestamp, int *data, int length, int func)
     switch (func)
     {
     case 0:
-        ret = dm.RunFunction("ARIMA", timestamp, data, length); //异常点检测
+        ret = dm.RunFunction((char *)"ARIMA", timestamp, data, length); //ARIMA预测
         break;
     case 1:
-        ret = dm.RunFunction("ADTK", timestamp, data, length); //移动平均
+        ret = dm.RunFunction((char *)"ADTK", timestamp, data, length); //ADTK异常检测
+        break;
+    case 2:
+        ret = dm.RunFunction((char *)"AutoEncoder", timestamp, data, length); //自编码预测
+        break;
+    case 3:
+        ret = dm.RunFunction((char *)"TCN", timestamp, data, length); //自编码预测
         break;
     default:
         break;
     }
+    dm.CloseSocket();
     return 0;
 }
 
@@ -131,8 +145,13 @@ int readcsv(string csv, int *timestamp, int *data, int length)
     return i;
 }
 
-int main(int argc,char *argv[])
+int main(int argc, char *argv[])
 {
+    if(argc==1)
+    {
+        printf("使用说明：\n参数0：ARIMA方法\n参数1：ADTK方法\n参数2：AutoEncoder方法\n参数3：TCN方法\n");
+        return 1;
+    }
     string csvf = "temp.csv";
     int length = 3640;
     int *timestamp = new int[length];
