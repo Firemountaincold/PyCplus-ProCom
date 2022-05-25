@@ -91,7 +91,7 @@ class DataMineTools(DataMine): #继承DataMine
         plt.savefig('image/2.自相关性图.jpg')
         
         #平稳性检测
-        print(u'【计算】原始序列的检验结果为：\n',adfuller(data[u'datas']), method='ymw')
+        print(u'【计算】原始序列的检验结果为：\n',adfuller(data[u'datas']))
         #返回值依次为：adf, pvalue p值, usedlag, nobs, critical values临界值 , icbest, regresults, resstore
         #adf 分别大于3中不同检验水平的3个临界值,单位检测统计量对应的p 值显著大于 0.05 , 说明序列可以判定为 非平稳序列
         
@@ -206,7 +206,7 @@ class DataMineTools(DataMine): #继承DataMine
         autoencoder = tf.keras.Model(input_layer, decoded)
         autoencoder.compile(optimizer='adam', loss='mean_squared_error')
         
-        history = autoencoder.fit(x, y, epochs=30, batch_size=128, shuffle=True, validation_split=0.1)
+        history = autoencoder.fit(x, y, epochs=30, batch_size=128, shuffle=True, validation_split=0.1, verbose=2)
         
         # 预测
         # calculate_losses是一个辅助函数，计算每个数据样本的重建损失
@@ -233,7 +233,7 @@ class DataMineTools(DataMine): #继承DataMine
         print("【评估】测试集评估结果： \n")
         print("\t准确率 : {} \n\t召回率 : {} \n\t精确率 : {} \n\tF1分数 : {}\n".format(accuracy,recall,precision,f1))
         
-        return
+        return str('model.predict(10)'), testing_set_predictions
     
     
     def TCN(self, timestamps, datas):
@@ -275,7 +275,7 @@ class DataMineTools(DataMine): #继承DataMine
             verbose=2
         )]
         model.fit(train_dataset, validation_data=valid_dataset, callbacks=callbacks, epochs=1000, verbose=2)
-        print("【信息】训练所得模型：", model.summary())
+        model.summary()
         test_x = tf.reshape(test_x, [len(test_x), seq_len, 2])
         test_x_pred = model.predict(test_x)
         pred_y = []
