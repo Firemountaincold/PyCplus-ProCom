@@ -1,3 +1,4 @@
+from xml.etree.ElementPath import prepare_descendant
 from DataMine import DataMine, tcn
 import numpy as np
 import pandas as pd
@@ -184,56 +185,69 @@ class DataMineTools(DataMine): #继承DataMine
         print("【计算】已生成图片——区间异常图")
         return str("outliers by [LevelShitAD, InterQuartileRangeAD, PersistAD]"), outliers
     
-    def AutoEncoder(self, timestamps, datas, labels):
+    
+    def AutoEncoder(self, timestamps, datas):
         # 训练 
-        print("【训练】训练开始：")
-        x_data = np.array(timestamps, datas)
-        y_data = np.array(labels)
+        warnings.filterwarnings('ignore')
+        print("【训练】模型训练开始：")
+        x_data = np.array([i%31536000 for i in timestamps])
+        y_data = np.array(datas)
         x, x_test, y, y_test = train_test_split(x_data, y_data, test_size=0.2)
         print("\t训练集大小：{}，测试集大小：{}".format(len(x), len(x_test)))
-        input_layer = tf.keras.Input(shape=(2,))
+        input_layer = keras.Input(shape=(1,))
             
-        # 编码层
-        encoded = Dense(128, activation='relu')(input_layer)
-        encoded = Dense(64, activation='relu')(encoded)
-        encoded = Dense(32, activation='relu')(encoded)
-
-        # 解码层
+        encoded = Dense(8, activation='relu', activity_regularizer='l2')(input_layer) # l2正则化约束
+        encoded = Dense(16, activation='relu', activity_regularizer='l2')(encoded)
+        encoded = Dense(32, activation='relu', activity_regularizer='l2')(encoded)
         decoded = Dense(64, activation='relu')(encoded)
         decoded = Dense(128, activation='relu')(decoded)
-        decoded = Dense(784, activation='tanh')(decoded)
-        
-        autoencoder = tf.keras.Model(input_layer, decoded)
+        decoded = Dense(256, activation='relu')(decoded)
+        autoencoder = Model(input_layer, decoded)
         autoencoder.compile(optimizer='adam', loss='mean_squared_error')
         
-        history = autoencoder.fit(x, y, epochs=30, batch_size=128, shuffle=True, validation_split=0.1, verbose=2)
+        epochs = 1000
+        batch_size = 32
         
-        # 预测
-        # calculate_losses是一个辅助函数，计算每个数据样本的重建损失
-        def calculate_losses(x, preds):
-            losses = np.zeros(len(x))
-            for i in range(len(x)):
-                losses[i] = ((preds[i] - x[i]) ** 2).mean(axis=None)
-            return losses
+        callbacks = [keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            min_delta=1e-3,
+            patience=100,
+            mode='min',
+            verbose=2
+        )]
+        #训练
+        autoencoder.fit(x,y,validation_data=(x_test,y_test),callbacks=callbacks,epochs=epochs,batch_size=batch_size)
+        autoencoder.summary()
+        # 加载模型
+        print("【信息】正在加载模型...")
+        
+        pred = autoencoder.predict(x_data)
+        pred_y = []
+        errors = []
 
-        # 我们将阈值设置为等于自动编码器的训练损失
-        threshold = history.history["loss"][-1]
-
-        testing_set_predictions=autoencoder.predict(x_test)
-        test_losses=calculate_losses(x_test, testing_set_predictions)
-        testing_set_predictions=np.zeros(len(test_losses))
-        testing_set_predictions[np.where(test_losses>threshold)]=1
-        print("【预测】测试集预测结果：\n", testing_set_predictions)
+        for i in pred:
+            pred_y.append(i[-1])
         
-        # 评估
-        accuracy = metrics.accuracy_score(y_test, testing_set_predictions)
-        recall = metrics.recall_score(y_test, testing_set_predictions)
-        precision = metrics.precision_score(y_test, testing_set_predictions)
-        f1 = metrics.f1_score(y_test, testing_set_predictions)
-        print("【评估】测试集评估结果： \n")
-        print("\t准确率 : {} \n\t召回率 : {} \n\t精确率 : {} \n\tF1分数 : {}\n".format(accuracy,recall,precision,f1))
+        plt.figure(figsize=(18, 12))
+        plt.plot(pred_y, label='ae_data', color='red')
+        plt.plot(y_data, label='data', color='blue')
+        plt.savefig('ae/1.预测对比图.jpg')
+        print("【信息】已生成图片——预测对比图")
         
-        return str('model.predict(10)'), testing_set_predictions
+        for (yy, recon) in zip(y_data, pred_y):
+            # 计算预测和真实图片之间的均方差1
+            mse = np.mean((yy - recon) ** 2)
+            errors.append(mse)
+        
+        # compute the q-th quantile of the errors which serves as our
+        # threshold to identify anomalies -- any data point that our model
+        # reconstructed with > threshold error will be marked as an outlier
+        thresh = np.quantile(errors, 0.999)
+        idxs = np.where(np.array(errors) >= thresh)[0]
+        print("【信息】预测均方差为: {}".format(thresh))
+        print("【信息】发现了{} 个异常点。".format(len(idxs)))
+        
+        return str('outliers found'), idxs.tolist()
     
     
     def TCN(self, timestamps, datas):
